@@ -1053,9 +1053,9 @@ public class FlowService extends BaseFlowService {
 
         // new primary path
         commandGroups.add(createInstallIngressRules(pathsToSwap.getProtectedForwardPath(),
-                mapTransitVlan(pathsToSwap.getProtectedForwardEncapsulation())));
+                pathsToSwap.getProtectedForwardEncapsulation()));
         commandGroups.add(createInstallIngressRules(pathsToSwap.getProtectedReversePath(),
-                mapTransitVlan(pathsToSwap.getProtectedReverseEncapsulation())));
+                pathsToSwap.getProtectedReverseEncapsulation()));
 
         if (pathsToSwap.getForwardPath().getMeterId() != null) {
             commandGroups.add(createRemoveMeter(pathsToSwap.getForwardPath()));
@@ -1071,49 +1071,52 @@ public class FlowService extends BaseFlowService {
         List<CommandGroup> commandGroups = new ArrayList<>();
 
         //TODO: hard-coded encapsulation will be removed in Flow H&S
-        TransitVlan forwardTransitVlan = mapTransitVlan(pathsToInstall.getForwardEncapsulation());
-        TransitVlan reverseTransitVlan = mapTransitVlan(pathsToInstall.getReverseEncapsulation());
+        EncapsulationResources forwardEncapsulationResources = pathsToInstall.getForwardEncapsulation();
+        EncapsulationResources reverseEncapsulationResources = pathsToInstall.getReverseEncapsulation();
 
         if (pathsToInstall.getForwardPath() != null) {
             createInstallTransitAndEgressRules(pathsToInstall.getForwardPath(),
-                    forwardTransitVlan).ifPresent(commandGroups::add);
+                    forwardEncapsulationResources).ifPresent(commandGroups::add);
         }
         if (pathsToInstall.getReversePath() != null) {
             createInstallTransitAndEgressRules(pathsToInstall.getReversePath(),
-                    reverseTransitVlan).ifPresent(commandGroups::add);
+                    reverseEncapsulationResources).ifPresent(commandGroups::add);
         }
 
         if (pathsToInstall.getProtectedForwardPath() != null) {
             createInstallTransitAndEgressRules(pathsToInstall.getProtectedForwardPath(),
-                    mapTransitVlan(pathsToInstall.getProtectedForwardEncapsulation())).ifPresent(commandGroups::add);
+                    pathsToInstall.getProtectedForwardEncapsulation()).ifPresent(commandGroups::add);
         }
         if (pathsToInstall.getProtectedReversePath() != null) {
             createInstallTransitAndEgressRules(pathsToInstall.getProtectedReversePath(),
-                    mapTransitVlan(pathsToInstall.getProtectedReverseEncapsulation())).ifPresent(commandGroups::add);
+                    pathsToInstall.getProtectedReverseEncapsulation()).ifPresent(commandGroups::add);
         }
 
         // The ingress rule must be installed after the egress and transit ones.
         if (pathsToInstall.getForwardPath() != null) {
-            commandGroups.add(createInstallIngressRules(pathsToInstall.getForwardPath(), forwardTransitVlan));
+            commandGroups.add(createInstallIngressRules(pathsToInstall.getForwardPath(),
+                    forwardEncapsulationResources));
         }
         if (pathsToInstall.getReversePath() != null) {
-            commandGroups.add(createInstallIngressRules(pathsToInstall.getReversePath(), reverseTransitVlan));
+            commandGroups.add(createInstallIngressRules(pathsToInstall.getReversePath(),
+                    reverseEncapsulationResources));
         }
 
         return commandGroups;
     }
 
-    private Optional<CommandGroup> createInstallTransitAndEgressRules(FlowPath flowPath, TransitVlan transitVlan) {
+    private Optional<CommandGroup> createInstallTransitAndEgressRules(FlowPath flowPath,
+                                                                      EncapsulationResources encapsulationResources) {
         //TODO: hard-coded encapsulation will be removed in Flow H&S
         List<InstallTransitFlow> rules = flowCommandFactory.createInstallTransitAndEgressRulesForFlow(flowPath,
-                transitVlan);
+                encapsulationResources);
         return !rules.isEmpty() ? Optional.of(new CommandGroup(rules, FailureReaction.ABORT_BATCH))
                 : Optional.empty();
     }
 
-    private CommandGroup createInstallIngressRules(FlowPath flowPath, TransitVlan transitVlan) {
+    private CommandGroup createInstallIngressRules(FlowPath flowPath, EncapsulationResources encapsulationResources) {
         return new CommandGroup(singletonList(
-                flowCommandFactory.createInstallIngressRulesForFlow(flowPath, transitVlan)),
+                flowCommandFactory.createInstallIngressRulesForFlow(flowPath, encapsulationResources)),
                 FailureReaction.ABORT_BATCH);
     }
 

@@ -31,4 +31,9 @@ public class VxlanEncapsulation implements EncapsulationResources {
     public final FlowEncapsulationType getEncapsulationType() {
         return FlowEncapsulationType.VXLAN;
     }
+
+    @Override
+    public Integer getTransitEncapsulationId() {
+        return vxlan.getVni();
+    }
 }

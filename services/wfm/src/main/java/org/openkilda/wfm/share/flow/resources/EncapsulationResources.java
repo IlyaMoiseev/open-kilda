@@ -19,4 +19,6 @@ import org.openkilda.model.FlowEncapsulationType;
 
 public interface EncapsulationResources {
     FlowEncapsulationType getEncapsulationType();
+
+    Integer getTransitEncapsulationId();
 }

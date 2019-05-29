@@ -31,4 +31,9 @@ public class TransitVlanEncapsulation implements EncapsulationResources {
     public final FlowEncapsulationType getEncapsulationType() {
         return FlowEncapsulationType.TRANSIT_VLAN;
     }
+
+    @Override
+    public Integer getTransitEncapsulationId() {
+        return transitVlan.getVlan();
+    }
 }

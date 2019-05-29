@@ -56,6 +56,7 @@ import org.openkilda.messaging.error.ErrorData;
 import org.openkilda.messaging.error.ErrorMessage;
 import org.openkilda.messaging.error.ErrorType;
 import org.openkilda.messaging.model.SpeakerSwitchView.Feature;
+import org.openkilda.model.FlowEncapsulationType;
 import org.openkilda.model.Meter;
 import org.openkilda.model.OutputVlanType;
 
@@ -120,6 +121,7 @@ import org.projectfloodlight.openflow.protocol.meterband.OFMeterBandDrop;
 import org.projectfloodlight.openflow.protocol.oxm.OFOxms;
 import org.projectfloodlight.openflow.types.DatapathId;
 import org.projectfloodlight.openflow.types.EthType;
+import org.projectfloodlight.openflow.types.IPv4Address;
 import org.projectfloodlight.openflow.types.IpProtocol;
 import org.projectfloodlight.openflow.types.MacAddress;
 import org.projectfloodlight.openflow.types.OFBufferId;
@@ -170,6 +172,12 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
     public static final int BDF_DEFAULT_PORT = 3784;
     public static final int MIN_RATE_IN_KBPS = 64;
     public static final int ROUND_TRIP_LATENCY_GROUP_ID = 1;
+    public static final MacAddress STUB_VXLAN_ETH_SRC_MAC = MacAddress.of(0xFFFFFFEDCBA1L);
+    public static final MacAddress STUB_VXLAN_ETH_DST_MAC = MacAddress.of(0xFFFFFFEDCBA2L);
+    public static final IPv4Address STUB_VXLAN_IPV4_SRC = IPv4Address.of("127.0.0.1");
+    public static final IPv4Address STUB_VXLAN_IPV4_DST = IPv4Address.of("127.0.0.2");
+    public static final int STUB_VXLAN_UDP_SRC = 4500;
+
 
     // This is invalid VID mask - it cut of highest bit that indicate presence of VLAN tag on package. But valid mask
     // 0x1FFF lead to rule reject during install attempt on accton based switches.
@@ -365,11 +373,9 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
      * {@inheritDoc}
      */
     @Override
-    public long installIngressFlow(
-            final DatapathId dpid, final String flowId,
-            final Long cookie, final int inputPort, final int outputPort,
-            final int inputVlanId, final int transitVlanId,
-            final OutputVlanType outputVlanType, final long meterId) throws SwitchOperationException {
+    public long installIngressFlow(DatapathId dpid, String flowId, Long cookie, int inputPort, int outputPort,
+                                   int inputVlanId, int transitTunnelId, OutputVlanType outputVlanType, long meterId,
+                                   FlowEncapsulationType encapsulationType) throws SwitchOperationException {
         List<OFAction> actionList = new ArrayList<>();
         IOFSwitch sw = lookupSwitch(dpid);
         OFFactory ofFactory = sw.getOFFactory();
@@ -378,7 +384,8 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
         OFInstructionMeter meter = buildMeterInstruction(meterId, sw, ofFactory, actionList);
 
         // output action based on encap scheme
-        actionList.addAll(inputVlanTypeToOfActionList(ofFactory, transitVlanId, outputVlanType));
+        actionList.addAll(inputVlanTypeToOfActionList(ofFactory, transitTunnelId, outputVlanType,
+                encapsulationType));
 
         // transmit packet from outgoing port
         actionList.add(actionSetOutputPort(ofFactory, OFPort.of(outputPort)));
@@ -387,7 +394,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
         OFInstructionApplyActions actions = buildInstructionApplyActions(ofFactory, actionList);
 
         // build match by input port and input vlan id
-        Match match = matchFlow(ofFactory, inputPort, inputVlanId);
+        Match match = matchFlow(ofFactory, inputPort, inputVlanId, encapsulationType);
 
         // build FLOW_MOD command with meter
         OFFlowMod.Builder builder = prepareFlowModBuilder(ofFactory, cookie & FLOW_COOKIE_MASK, FLOW_PRIORITY)
@@ -405,17 +412,15 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
      * {@inheritDoc}
      */
     @Override
-    public long installEgressFlow(
-            final DatapathId dpid, String flowId, final Long cookie,
-            final int inputPort, final int outputPort,
-            final int transitVlanId, final int outputVlanId,
-            final OutputVlanType outputVlanType) throws SwitchOperationException {
+    public long installEgressFlow(DatapathId dpid, String flowId, Long cookie, int inputPort, int outputPort,
+                                  int transitTunnelId, int outputVlanId, OutputVlanType outputVlanType,
+                                  FlowEncapsulationType encapsulationType) throws SwitchOperationException {
         List<OFAction> actionList = new ArrayList<>();
         IOFSwitch sw = lookupSwitch(dpid);
         OFFactory ofFactory = sw.getOFFactory();
 
         // output action based on encap scheme
-        actionList.addAll(outputVlanTypeToOfActionList(ofFactory, outputVlanId, outputVlanType));
+        actionList.addAll(outputVlanTypeToOfActionList(ofFactory, outputVlanId, outputVlanType, encapsulationType));
 
         // transmit packet from outgoing port
         actionList.add(actionSetOutputPort(ofFactory, OFPort.of(outputPort)));
@@ -425,7 +430,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
 
         // build FLOW_MOD command, no meter
         OFFlowMod flowMod = prepareFlowModBuilder(ofFactory, cookie & FLOW_COOKIE_MASK, FLOW_PRIORITY)
-                .setMatch(matchFlow(ofFactory, inputPort, transitVlanId))
+                .setMatch(matchFlow(ofFactory, inputPort, transitTunnelId, encapsulationType))
                 .setInstructions(ImmutableList.of(actions))
                 .build();
 
@@ -436,16 +441,15 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
      * {@inheritDoc}
      */
     @Override
-    public long installTransitFlow(
-            final DatapathId dpid, final String flowId,
-            final Long cookie, final int inputPort, final int outputPort,
-            final int transitVlanId) throws SwitchOperationException {
+    public long installTransitFlow(DatapathId dpid, String flowId, Long cookie, int inputPort, int outputPort,
+                                   int transitTunnelId, FlowEncapsulationType encapsulationType)
+            throws SwitchOperationException {
         List<OFAction> actionList = new ArrayList<>();
         IOFSwitch sw = lookupSwitch(dpid);
         OFFactory ofFactory = sw.getOFFactory();
 
         // build match by input port and transit vlan id
-        Match match = matchFlow(ofFactory, inputPort, transitVlanId);
+        Match match = matchFlow(ofFactory, inputPort, transitTunnelId, encapsulationType);
 
         // transmit packet from outgoing port
         actionList.add(actionSetOutputPort(ofFactory, OFPort.of(outputPort)));
@@ -466,12 +470,9 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
      * {@inheritDoc}
      */
     @Override
-    public long installOneSwitchFlow(
-            final DatapathId dpid, final String flowId,
-            final Long cookie, final int inputPort,
-            final int outputPort, final int inputVlanId,
-            final int outputVlanId,
-            final OutputVlanType outputVlanType, final long meterId) throws SwitchOperationException {
+    public long installOneSwitchFlow(DatapathId dpid, String flowId, Long cookie, int inputPort, int outputPort,
+                                     int inputVlanId, int outputVlanId, OutputVlanType outputVlanType, long meterId)
+            throws SwitchOperationException {
         // TODO: As per other locations, how different is this to IngressFlow? Why separate code path?
         //          As with any set of tests, the more we test the same code path, the better.
         //          Based on brief glance, this looks 90% the same as IngressFlow.
@@ -494,7 +495,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
         OFInstructionApplyActions actions = buildInstructionApplyActions(ofFactory, actionList);
 
         // build match by input port and transit vlan id
-        Match match = matchFlow(ofFactory, inputPort, inputVlanId);
+        Match match = matchFlow(ofFactory, inputPort, inputVlanId, FlowEncapsulationType.TRANSIT_VLAN);
 
         // build FLOW_MOD command with meter
         OFFlowMod.Builder builder = prepareFlowModBuilder(ofFactory, cookie & FLOW_COOKIE_MASK, FLOW_PRIORITY)
@@ -735,7 +736,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
 
 
     @Override
-    public List<Long> deleteRulesByCriteria(final DatapathId dpid, DeleteRulesCriteria... criteria)
+    public List<Long> deleteRulesByCriteria(DatapathId dpid, DeleteRulesCriteria... criteria)
             throws SwitchOperationException {
         List<OFFlowStatsEntry> flowStatsBefore = dumpFlowTable(dpid);
 
@@ -766,7 +767,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
     }
 
     @Override
-    public List<Long> deleteDefaultRules(final DatapathId dpid) throws SwitchOperationException {
+    public List<Long> deleteDefaultRules(DatapathId dpid) throws SwitchOperationException {
         List<Long> deletedRules = deleteRulesWithCookie(dpid, DROP_RULE_COOKIE, VERIFICATION_BROADCAST_RULE_COOKIE,
                 VERIFICATION_UNICAST_RULE_COOKIE, DROP_VERIFICATION_LOOP_RULE_COOKIE, CATCH_BFD_RULE_COOKIE);
 
@@ -1183,7 +1184,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
         if (criteria.getInPort() != null) {
             // Match either In Port or both Port & Vlan criteria.
             Match match = matchFlow(ofFactory, criteria.getInPort(),
-                    Optional.ofNullable(criteria.getEncapsulationId()).orElse(0));
+                    Optional.ofNullable(criteria.getEncapsulationId()).orElse(0), criteria.getEncapsulationType());
             builder.setMatch(match);
 
         } else if (criteria.getEncapsulationId() != null) {
@@ -1237,17 +1238,24 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
      *
      * @param ofFactory OF factory for the switch
      * @param inputPort input port for the match
-     * @param vlanId vlanID to match on; 0 means match on port
+     * @param tunnelId tunnel id to match on; 0 means match on port
      * @return {@link Match}
      */
-    private Match matchFlow(final OFFactory ofFactory, final int inputPort, final int vlanId) {
+    private Match matchFlow(OFFactory ofFactory, int inputPort, int tunnelId, FlowEncapsulationType encapsulationType) {
         Match.Builder mb = ofFactory.buildMatch();
-        //
-        // Extra emphasis: vlan of 0 means match on port on not VLAN.
-        //
         mb.setExact(MatchField.IN_PORT, OFPort.of(inputPort));
-        if (vlanId > 0) {
-            matchVlan(ofFactory, mb, vlanId);
+        if (tunnelId > 0) {
+            switch (encapsulationType) {
+                case TRANSIT_VLAN:
+                    matchVlan(ofFactory, mb, tunnelId);
+                    break;
+                case VXLAN:
+                    matchVxlan(ofFactory, mb, tunnelId);
+                    break;
+                default:
+                    throw new UnsupportedOperationException(
+                            String.format("Unknown encapsulation type: %s", encapsulationType));
+            }
         }
 
         return mb.build();
@@ -1262,6 +1270,14 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
         }
     }
 
+    private void matchVxlan(OFFactory ofFactory, Match.Builder matchBuilder, long tunnelId) {
+        if (OF_12.compareTo(ofFactory.getVersion()) >= 0) {
+            matchBuilder.setMasked(MatchField.TUNNEL_ID, U64.of(tunnelId), U64.FULL_MASK);
+        } else {
+            matchBuilder.setExact(MatchField.TUNNEL_ID, U64.of(tunnelId));
+        }
+    }
+
     /**
      * Builds OFAction list based on flow parameters for replace scheme.
      *
@@ -1270,8 +1286,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
      * @param outputVlanType type of action to apply to the outputVlanId if greater than 0
      * @return list of {@link OFAction}
      */
-    private List<OFAction> replaceSchemeOutputVlanTypeToOfActionList(OFFactory ofFactory, int outputVlanId,
-                                                                     OutputVlanType outputVlanType) {
+    private List<OFAction> getOutputVlanAction(OFFactory ofFactory, int outputVlanId, OutputVlanType outputVlanType) {
         List<OFAction> actionList;
 
         switch (outputVlanType) {
@@ -1288,6 +1303,15 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
                 logger.error("Unknown OutputVlanType: " + outputVlanType);
         }
 
+        return actionList;
+    }
+
+    private List<OFAction> getOutputVxlanAction(OFFactory ofFactory, int outputVlanId, OutputVlanType outputVlanType) {
+        List<OFAction> actionList = new ArrayList<>(2);
+        actionList.add(ofFactory.actions().noviflowPopVxlanTunnel());
+        if (outputVlanType == OutputVlanType.REPLACE) {
+            actionList.add(actionReplaceVlan(ofFactory, outputVlanId));
+        }
         return actionList;
     }
 
@@ -1333,24 +1357,45 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
      * @return list of {@link OFAction}
      */
     private List<OFAction> outputVlanTypeToOfActionList(OFFactory ofFactory, int outputVlanId,
-                                                        OutputVlanType outputVlanType) {
-        return replaceSchemeOutputVlanTypeToOfActionList(ofFactory, outputVlanId, outputVlanType);
+                                                        OutputVlanType outputVlanType,
+                                                        FlowEncapsulationType encapsulationType) {
+        switch (encapsulationType) {
+            case TRANSIT_VLAN:
+                return getOutputVlanAction(ofFactory, outputVlanId, outputVlanType);
+            case VXLAN:
+                return getOutputVxlanAction(ofFactory, outputVlanId, outputVlanType);
+            default:
+                throw new UnsupportedOperationException(
+                        String.format("Unknown encapsulation type: %s", encapsulationType));
+        }
     }
 
     /**
      * Chooses encapsulation scheme for building OFAction list.
      *
      * @param ofFactory OF factory for the switch
-     * @param transitVlanId set vlan on packet or replace it before forwarding via outputPort; 0 means not to set
+     * @param transitTunnelId set vlan on packet or replace it before forwarding via outputPort; 0 means not to set
      * @return list of {@link OFAction}
      */
-    private List<OFAction> inputVlanTypeToOfActionList(OFFactory ofFactory, int transitVlanId,
-                                                       OutputVlanType outputVlanType) {
+    private List<OFAction> inputVlanTypeToOfActionList(OFFactory ofFactory, int transitTunnelId,
+                                                       OutputVlanType outputVlanType,
+                                                       FlowEncapsulationType encapsulationType) {
         List<OFAction> actionList = new ArrayList<>(3);
-        if (OutputVlanType.PUSH.equals(outputVlanType) || OutputVlanType.NONE.equals(outputVlanType)) {
-            actionList.add(actionPushVlan(ofFactory, ETH_TYPE));
+        switch (encapsulationType) {
+            case TRANSIT_VLAN:
+                if (OutputVlanType.PUSH.equals(outputVlanType) || OutputVlanType.NONE.equals(outputVlanType)) {
+                    actionList.add(actionPushVlan(ofFactory, ETH_TYPE));
+                }
+                actionList.add(actionReplaceVlan(ofFactory, transitTunnelId));
+                break;
+            case VXLAN:
+                actionList.add(actionPushVxlan(ofFactory, transitTunnelId));
+                break;
+            default:
+                throw new UnsupportedOperationException(
+                        String.format("Unknown encapsulation type: %s", encapsulationType));
         }
-        actionList.add(actionReplaceVlan(ofFactory, transitVlanId));
+
         return actionList;
     }
 
@@ -1398,6 +1443,19 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
     private OFAction actionPushVlan(final OFFactory ofFactory, final int etherType) {
         OFActions actions = ofFactory.actions();
         return actions.buildPushVlan().setEthertype(EthType.of(etherType)).build();
+    }
+
+    private OFAction actionPushVxlan(OFFactory ofFactory, long tunnelId) {
+        OFActions actions = ofFactory.actions();
+        return actions.buildNoviflowPushVxlanTunnel()
+                .setVni(tunnelId)
+                .setEthSrc(STUB_VXLAN_ETH_SRC_MAC)
+                .setEthDst(STUB_VXLAN_ETH_DST_MAC)
+                .setUdpSrc(STUB_VXLAN_UDP_SRC)
+                .setIpv4Src(STUB_VXLAN_IPV4_SRC)
+                .setIpv4Dst(STUB_VXLAN_IPV4_DST)
+                .setFlags((short) 0x01)
+                .build();
     }
 
     /**

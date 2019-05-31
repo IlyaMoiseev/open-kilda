@@ -738,7 +738,7 @@ public class SwitchManagerTest {
         replay(ofSwitchService, iofSwitch);
 
         // when
-        DeleteRulesCriteria criteria = DeleteRulesCriteria.builder().inVlan((int) testInVlan).build();
+        DeleteRulesCriteria criteria = DeleteRulesCriteria.builder().encapsulationId((int) testInVlan).build();
         List<Long> deletedRules = switchManager.deleteRulesByCriteria(dpid, criteria);
 
         // then
@@ -777,7 +777,7 @@ public class SwitchManagerTest {
         // when
         DeleteRulesCriteria criteria = DeleteRulesCriteria.builder()
                 .inPort(testInPort)
-                .inVlan((int) testInVlan).build();
+                .encapsulationId((int) testInVlan).build();
         List<Long> deletedRules = switchManager.deleteRulesByCriteria(dpid, criteria);
 
         // then
@@ -854,7 +854,7 @@ public class SwitchManagerTest {
         // when
         DeleteRulesCriteria criteria = DeleteRulesCriteria.builder()
                 .inPort(testInPort)
-                .inVlan((int) testInVlan)
+                .encapsulationId((int) testInVlan)
                 .priority(testPriority).build();
         List<Long> deletedRules = switchManager.deleteRulesByCriteria(dpid, criteria);
 

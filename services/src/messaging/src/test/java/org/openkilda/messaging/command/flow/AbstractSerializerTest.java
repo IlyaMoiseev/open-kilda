@@ -121,7 +121,7 @@ public abstract class AbstractSerializerTest implements AbstractSerializer {
             .sourceSwitch(new SwitchId("ff:01")).sourcePort(10).sourcePort(100)
             .destinationSwitch(new SwitchId("ff:02")).destinationPort(20).destinationVlan(200)
             .meterId(1)
-            .transitVlan(1024)
+            .transitEncapsulationId(1024)
             .state(FLOW_STATUS)
             .flowPath(path)
             .build();

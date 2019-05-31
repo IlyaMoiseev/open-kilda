@@ -463,7 +463,7 @@ public class FlowTopologyTest extends AbstractStormTest {
         flow.setCookie(1);
         flow.setFlowPath(new PathInfoData(0L, Collections.emptyList()));
         flow.setMeterId(1);
-        flow.setTransitVlan(2);
+        flow.setTransitEncapsulationId(2);
         flow.setState(FlowState.IN_PROGRESS);
 
         for (int i = 0; i < 2; i++) {

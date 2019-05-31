@@ -15,6 +15,7 @@
 
 package org.openkilda.wfm.share.flow.resources.transitvlan;
 
+import org.openkilda.model.EncapsulationId;
 import org.openkilda.model.FlowEncapsulationType;
 import org.openkilda.model.TransitVlan;
 import org.openkilda.wfm.share.flow.resources.EncapsulationResources;
@@ -35,5 +36,9 @@ public class TransitVlanEncapsulation implements EncapsulationResources {
     @Override
     public Integer getTransitEncapsulationId() {
         return transitVlan.getVlan();
+    }
+
+    public EncapsulationId getEncapsulation() {
+        return transitVlan;
     }
 }

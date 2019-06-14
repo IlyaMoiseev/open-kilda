@@ -23,8 +23,8 @@ import org.openkilda.wfm.topology.network.controller.bfd.BfdPortFsm.BfdPortFsmCo
 import org.openkilda.wfm.topology.network.controller.bfd.BfdPortFsm.BfdPortFsmEvent;
 import org.openkilda.wfm.topology.network.controller.bfd.BfdPortFsm.BfdPortFsmState;
 import org.openkilda.wfm.topology.network.error.BfdPortControllerNotFoundException;
-import org.openkilda.wfm.topology.network.model.Endpoint;
-import org.openkilda.wfm.topology.network.model.IslReference;
+import org.openkilda.wfm.share.model.Endpoint;
+import org.openkilda.wfm.share.model.IslReference;
 import org.openkilda.wfm.topology.network.model.LinkStatus;
 
 import lombok.extern.slf4j.Slf4j;

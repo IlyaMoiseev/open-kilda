@@ -17,7 +17,7 @@ package org.openkilda.wfm.topology.network.model.facts;
 
 import org.openkilda.wfm.topology.network.model.BiIslDataHolder;
 import org.openkilda.wfm.topology.network.model.IslDataHolder;
-import org.openkilda.wfm.topology.network.model.IslReference;
+import org.openkilda.wfm.share.model.IslReference;
 
 public class DiscoveryFacts extends BiIslDataHolder<IslDataHolder> {
     public DiscoveryFacts(IslReference reference) {

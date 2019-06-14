@@ -21,7 +21,7 @@ import org.openkilda.wfm.AbstractBolt;
 import org.openkilda.wfm.error.PipelineException;
 import org.openkilda.wfm.share.hubandspoke.CoordinatorSpout;
 import org.openkilda.wfm.topology.network.controller.AntiFlapFsm.Config;
-import org.openkilda.wfm.topology.network.model.Endpoint;
+import org.openkilda.wfm.share.model.Endpoint;
 import org.openkilda.wfm.topology.network.model.LinkStatus;
 import org.openkilda.wfm.topology.network.model.NetworkOptions;
 import org.openkilda.wfm.topology.network.service.IAntiFlapCarrier;

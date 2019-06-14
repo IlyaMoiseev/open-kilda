@@ -32,8 +32,8 @@ import org.openkilda.persistence.repositories.BfdSessionRepository;
 import org.openkilda.persistence.repositories.RepositoryFactory;
 import org.openkilda.persistence.repositories.SwitchRepository;
 import org.openkilda.wfm.topology.network.error.BfdPortControllerNotFoundException;
-import org.openkilda.wfm.topology.network.model.Endpoint;
-import org.openkilda.wfm.topology.network.model.IslReference;
+import org.openkilda.wfm.share.model.Endpoint;
+import org.openkilda.wfm.share.model.IslReference;
 import org.openkilda.wfm.topology.network.model.LinkStatus;
 
 import org.junit.Assert;

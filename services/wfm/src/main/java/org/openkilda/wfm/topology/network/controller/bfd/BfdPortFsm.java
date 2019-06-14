@@ -33,8 +33,8 @@ import org.openkilda.wfm.topology.network.controller.bfd.BfdPortFsm.BfdPortFsmEv
 import org.openkilda.wfm.topology.network.controller.bfd.BfdPortFsm.BfdPortFsmState;
 import org.openkilda.wfm.topology.network.error.SwitchReferenceLookupException;
 import org.openkilda.wfm.topology.network.model.BfdDescriptor;
-import org.openkilda.wfm.topology.network.model.Endpoint;
-import org.openkilda.wfm.topology.network.model.IslReference;
+import org.openkilda.wfm.share.model.Endpoint;
+import org.openkilda.wfm.share.model.IslReference;
 import org.openkilda.wfm.topology.network.model.LinkStatus;
 import org.openkilda.wfm.topology.network.service.IBfdPortCarrier;
 

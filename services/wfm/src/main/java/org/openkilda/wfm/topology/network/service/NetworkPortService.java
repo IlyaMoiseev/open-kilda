@@ -23,7 +23,7 @@ import org.openkilda.wfm.topology.network.controller.port.PortFsm;
 import org.openkilda.wfm.topology.network.controller.port.PortFsm.PortFsmContext;
 import org.openkilda.wfm.topology.network.controller.port.PortFsm.PortFsmEvent;
 import org.openkilda.wfm.topology.network.controller.port.PortFsm.PortFsmState;
-import org.openkilda.wfm.topology.network.model.Endpoint;
+import org.openkilda.wfm.share.model.Endpoint;
 import org.openkilda.wfm.topology.network.model.LinkStatus;
 
 import com.google.common.annotations.VisibleForTesting;

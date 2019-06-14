@@ -21,7 +21,7 @@ import org.openkilda.wfm.topology.network.controller.DecisionMakerFsm;
 import org.openkilda.wfm.topology.network.controller.DecisionMakerFsm.DecisionMakerFsmContext;
 import org.openkilda.wfm.topology.network.controller.DecisionMakerFsm.DecisionMakerFsmEvent;
 import org.openkilda.wfm.topology.network.controller.DecisionMakerFsm.DecisionMakerFsmState;
-import org.openkilda.wfm.topology.network.model.Endpoint;
+import org.openkilda.wfm.share.model.Endpoint;
 
 import lombok.extern.slf4j.Slf4j;
 

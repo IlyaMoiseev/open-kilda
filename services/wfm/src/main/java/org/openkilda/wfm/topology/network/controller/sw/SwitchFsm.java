@@ -32,7 +32,7 @@ import org.openkilda.wfm.topology.network.NetworkTopologyDashboardLogger;
 import org.openkilda.wfm.topology.network.controller.sw.SwitchFsm.SwitchFsmContext;
 import org.openkilda.wfm.topology.network.controller.sw.SwitchFsm.SwitchFsmEvent;
 import org.openkilda.wfm.topology.network.controller.sw.SwitchFsm.SwitchFsmState;
-import org.openkilda.wfm.topology.network.model.Endpoint;
+import org.openkilda.wfm.share.model.Endpoint;
 import org.openkilda.wfm.topology.network.model.LinkStatus;
 import org.openkilda.wfm.topology.network.model.facts.HistoryFacts;
 import org.openkilda.wfm.topology.network.service.ISwitchCarrier;

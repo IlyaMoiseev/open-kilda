@@ -24,9 +24,9 @@ import org.openkilda.wfm.topology.network.controller.IslFsm;
 import org.openkilda.wfm.topology.network.controller.IslFsm.IslFsmContext;
 import org.openkilda.wfm.topology.network.controller.IslFsm.IslFsmEvent;
 import org.openkilda.wfm.topology.network.controller.IslFsm.IslFsmState;
-import org.openkilda.wfm.topology.network.model.Endpoint;
+import org.openkilda.wfm.share.model.Endpoint;
 import org.openkilda.wfm.topology.network.model.IslDataHolder;
-import org.openkilda.wfm.topology.network.model.IslReference;
+import org.openkilda.wfm.share.model.IslReference;
 import org.openkilda.wfm.topology.network.model.NetworkOptions;
 import org.openkilda.wfm.topology.network.storm.bolt.isl.BfdManager;
 

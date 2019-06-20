@@ -37,6 +37,7 @@ FT -> CPT : kafka
 deactivate FT
 activate CPT
 CPT -> CPA: kafka
+deactivate CPT
 activate CPA
 CPA -> S42: zeroMQ
 deactivate CPA

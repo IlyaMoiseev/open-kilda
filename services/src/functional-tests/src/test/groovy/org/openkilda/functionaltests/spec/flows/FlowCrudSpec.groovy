@@ -16,6 +16,7 @@ import org.openkilda.messaging.error.MessageError
 import org.openkilda.messaging.info.event.IslChangeType
 import org.openkilda.messaging.info.event.PathNode
 import org.openkilda.messaging.payload.flow.FlowPayload
+import org.openkilda.model.FlowEncapsulationType
 import org.openkilda.model.SwitchId
 import org.openkilda.testing.model.topology.TopologyDefinition.Isl
 import org.openkilda.testing.model.topology.TopologyDefinition.Switch
@@ -702,6 +703,37 @@ class FlowCrudSpec extends BaseSpecification {
         flowDescription | bandwidth
         "a metered"     | 1000
         "an unmetered"  | 0
+    }
+
+    @Unroll
+    def "System allows to create/update encapsulation type for a flow\
+(#encapsulationCreate.toString() -> #encapsulationUpdate.toString())"() {
+        given: "Two active not neighboring switches"
+        def switchPair = topologyHelper.getNotNeighboringSwitchPair()
+
+        when: "Create a flow with #encapsulationCreate.toString() encapsulation type"
+        def flow = flowHelper.randomFlow(switchPair, false)
+        flow.encapsulationType = encapsulationCreate
+        flowHelper.addFlow(flow)
+
+        then: "Flow is created with the #encapsulationCreate.toString() encapsulation type"
+        def flowInfo = northbound.getFlow(flow.id)
+        flowInfo.encapsulationType == encapsulationCreate.toString().toLowerCase()
+
+        when: "Try to update the encapsulation type to #encapsulationUpdate.toString()"
+        northbound.updateFlow(flow.id, flow.tap { it.encapsulationType = encapsulationUpdate })
+
+        then: "The encapsulation type is changed to #encapsulationUpdate.toString()"
+        def flowInfo2 = northbound.getFlow(flow.id)
+        flowInfo2.encapsulationType == encapsulationUpdate.toString().toLowerCase()
+
+        and: "Cleanup: Delete the flow"
+        flowHelper.deleteFlow(flow.id)
+
+        where:
+        encapsulationCreate                | encapsulationUpdate
+        FlowEncapsulationType.TRANSIT_VLAN | FlowEncapsulationType.VXLAN
+        FlowEncapsulationType.VXLAN        | FlowEncapsulationType.TRANSIT_VLAN
     }
 
     @Shared

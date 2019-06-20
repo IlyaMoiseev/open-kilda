@@ -18,6 +18,7 @@ import org.openkilda.messaging.info.event.IslChangeType
 import org.openkilda.messaging.info.event.PathNode
 import org.openkilda.messaging.payload.flow.FlowEndpointPayload
 import org.openkilda.messaging.payload.flow.FlowPayload
+import org.openkilda.model.FlowEncapsulationType
 import org.openkilda.model.SwitchId
 import org.openkilda.northbound.dto.v2.flows.FlowEndpointV2
 import org.openkilda.northbound.dto.v2.flows.FlowRequestV2
@@ -509,6 +510,38 @@ class FlowCrudV2Spec extends BaseSpecification {
         islUtils.waitForIslStatus([newIsl, newIsl.reversed], MOVED)
         northbound.deleteLink(islUtils.toLinkParameters(newIsl))
         Wrappers.wait(WAIT_OFFSET) { assert !islUtils.getIslInfo(newIsl).isPresent() }
+    }
+
+    @Ignore("Encapsulation type is not implemented yet in APIv2")
+    @Unroll
+    def "System allows to create/update encapsulation type for a flow\
+(#encapsulationCreate.toString() -> #encapsulationUpdate.toString())"() {
+        given: "Two active not neighboring switches"
+        def switchPair = topologyHelper.getNotNeighboringSwitchPair()
+
+        when: "Create a flow with #encapsulationCreate.toString() encapsulation type"
+        def flow = flowHelperV2.randomFlow(switchPair, false)
+        flow.encapsulationType = encapsulationCreate
+        flowHelperV2.addFlow(flow)
+
+        then: "Flow is created with the #encapsulationCreate.toString() encapsulation type"
+        def flowInfo = northbound.getFlow(flow.id)
+        flowInfo.encapsulationType == encapsulationCreate.toString().toLowerCase()
+
+        when: "Try to update the encapsulation type to #encapsulationUpdate.toString()"
+        northbound.updateFlow(flow.id, flow.tap { it.encapsulationType = encapsulationUpdate })
+
+        then: "The encapsulation type is changed to #encapsulationUpdate.toString()"
+        def flowInfo2 = northbound.getFlow(flow.id)
+        flowInfo2.encapsulationType == encapsulationUpdate.toString().toLowerCase()
+
+        and: "Cleanup: Delete the flow"
+        flowHelper.deleteFlow(flow.id)
+
+        where:
+        encapsulationCreate                | encapsulationUpdate
+        FlowEncapsulationType.TRANSIT_VLAN | FlowEncapsulationType.VXLAN
+        FlowEncapsulationType.VXLAN        | FlowEncapsulationType.TRANSIT_VLAN
     }
 
     @Shared

@@ -116,6 +116,10 @@ class SwitchValidationSpec extends BaseSpecification {
     def "Switch validation is able to detect meter info into the 'misconfigured' section"() {
         when: "Create a flow"
         def (Switch srcSwitch, Switch dstSwitch) = topology.activeSwitches.findAll { it.ofVersion != "OF_12" }
+        def srcSwitchAmountOfRules = northbound.getSwitchRules(srcSwitch.dpId).flowEntries.size()
+        def dstSwitchAmountOfRules = northbound.getSwitchRules(dstSwitch.dpId).flowEntries.size()
+        def srcSwitchAmountOfMeters = northbound.getAllMeters(srcSwitch.dpId).meterEntries.size()
+        def dstSwitchAmountOfMeters = northbound.getAllMeters(dstSwitch.dpId).meterEntries.size()
         def flow = flowHelper.addFlow(flowHelper.randomFlow(srcSwitch, dstSwitch))
         def srcSwitchCreatedMeterIds = getCreatedMeterIds(srcSwitch.dpId)
         def dstSwitchCreatedMeterIds = getCreatedMeterIds(dstSwitch.dpId)
@@ -175,6 +179,49 @@ class SwitchValidationSpec extends BaseSpecification {
             switchHelper.verifyRuleSectionsAreEmpty(it, ["missing", "excess"])
         }
 
+        and: "Flow validation shows discrepancies"
+        def flowValidateResponse = northbound.validateFlow(flow.id)
+        flowValidateResponse.size() == 2
+        flowValidateResponse[0].each { direction ->
+            assert direction.discrepancies.size() == 2
+
+            def rate = direction.discrepancies[0]
+            assert rate.field == "meterRate"
+            assert rate.expectedValue == newBandwidth.toString()
+            assert rate.actualValue == flow.maximumBandwidth.toString()
+
+            def burst = direction.discrepancies[1]
+            assert burst.field == "meterBurstSize"
+            Long newBurstSize = switchHelper.getExpectedBurst(srcSwitch.dpId, newBandwidth)
+            verifyBurstSizeIsCorrect(newBurstSize, burst.expectedValue.toLong())
+            verifyBurstSizeIsCorrect(srcSwitchBurstSize, burst.actualValue.toLong())
+
+            direction.flowRulesTotal == 2
+            direction.switchRulesTotal == srcSwitchAmountOfRules + 2
+            direction.flowMetersTotal == 1
+            direction.switchMetersTotal == srcSwitchAmountOfMeters + 2
+        }
+
+        flowValidateResponse[1].each { direction ->
+            assert direction.discrepancies.size() == 2
+
+            def rate = direction.discrepancies[0]
+            assert rate.field == "meterRate"
+            assert rate.expectedValue == newBandwidth.toString()
+            assert rate.actualValue == flow.maximumBandwidth.toString()
+
+            def burst = direction.discrepancies[1]
+            assert burst.field == "meterBurstSize"
+            Long newBurstSize = switchHelper.getExpectedBurst(dstSwitch.dpId, newBandwidth)
+            verifyBurstSizeIsCorrect(newBurstSize, burst.expectedValue.toLong())
+            verifyBurstSizeIsCorrect(dstSwitchBurstSize, burst.actualValue.toLong())
+
+            direction.flowRulesTotal == 2
+            direction.switchRulesTotal == dstSwitchAmountOfRules + 2
+            direction.flowMetersTotal == 1
+            direction.switchMetersTotal == dstSwitchAmountOfMeters + 2
+        }
+
         when: "Restore correct bandwidth via DB"
         database.updateFlowBandwidth(flow.id, flow.maximumBandwidth)
 
@@ -187,6 +234,12 @@ class SwitchValidationSpec extends BaseSpecification {
 
         [srcSwitchValidateInfoRestored, dstSwitchValidateInfoRestored].each {
             switchHelper.verifyMeterSectionsAreEmpty(it, ["missing", "misconfigured", "excess"])
+        }
+
+        and: "Flow validation shows no discrepancies"
+        northbound.validateFlow(flow.id).each { direction ->
+            assert direction.discrepancies.empty
+            assert direction.asExpected
         }
 
         when: "Delete the flow"
@@ -357,7 +410,6 @@ class SwitchValidationSpec extends BaseSpecification {
             }
         }
     }
-
 
     def "Able to get empty switch validate information from the intermediate switch(flow contains > 2 switches)"() {
         given: "Two active not neighboring switches"

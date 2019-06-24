@@ -94,14 +94,17 @@ class ProtectedPathSpec extends BaseSpecification {
 
         then: "Flow is created without protected path"
         !northbound.getFlowPath(flow.id).protectedPath
+        def flowInfo = northbound.getFlow(flow.id)
+        !flowInfo.flowStatusDetails
 
         when: "Update flow: enable protected path(allocateProtectedPath=true)"
-        def currentLastUpdate = northbound.getFlow(flow.id).lastUpdated
+        def currentLastUpdate = flowInfo.lastUpdated
         northbound.updateFlow(flow.id, flow.tap { it.allocateProtectedPath = true })
 
         then: "Protected path is enabled"
         def flowPathInfoAfterUpdating = northbound.getFlowPath(flow.id)
         flowPathInfoAfterUpdating.protectedPath
+        northbound.getFlow(flow.id).flowStatusDetails
 
         currentLastUpdate < northbound.getFlow(flow.id).lastUpdated
 
@@ -114,6 +117,7 @@ class ProtectedPathSpec extends BaseSpecification {
 
         then: "Protected path is disabled"
         !northbound.getFlowPath(flow.id).protectedPath
+        !northbound.getFlow(flow.id).flowStatusDetails
 
         and: "Rules for protected path are deleted"
         Wrappers.wait(WAIT_OFFSET) {
@@ -871,12 +875,18 @@ class ProtectedPathSpec extends BaseSpecification {
 
         then: "Flow state is changed to DEGRADED"
         Wrappers.wait(WAIT_OFFSET) { assert northbound.getFlowStatus(flow.id).status == FlowState.DEGRADED }
+        def flowStatusDetails = northbound.getFlow(flow.id).flowStatusDetails
+        flowStatusDetails.mainFlowPathStatus == "Up"
+        flowStatusDetails.protectedFlowPathStatus == "Down"
 
         when: "Break ISL on the main path (bring port down) for changing the flow state to DOWN"
         northbound.portDown(currentIsls[0].dstSwitch.dpId, currentIsls[0].dstPort)
 
         then: "Flow state is changed to DOWN"
         Wrappers.wait(WAIT_OFFSET) { assert northbound.getFlowStatus(flow.id).status == FlowState.DOWN }
+        def flowStatusDetails2 = northbound.getFlow(flow.id).flowStatusDetails
+        flowStatusDetails2.mainFlowPathStatus == "Down"
+        flowStatusDetails2.protectedFlowPathStatus == "Down"
 
         when: "Try to swap paths when main/protected paths are not available"
         northbound.swapFlowPath(flow.id)
@@ -891,9 +901,12 @@ class ProtectedPathSpec extends BaseSpecification {
         northbound.portUp(currentIsls[0].srcSwitch.dpId, currentIsls[0].srcPort)
         northbound.portUp(currentIsls[0].dstSwitch.dpId, currentIsls[0].dstPort)
 
-        //TODO (andriidovhan) state should change to DEGRADED when pr2430 is merged
+        //TODO (andriidovhan) FlowState should be DEGRADED and mainFlowPathStatus should be "Up" when pr2430 is merged
         then: "Flow state is still DOWN"
         Wrappers.timedLoop(WAIT_OFFSET) { assert northbound.getFlowStatus(flow.id).status == FlowState.DOWN }
+        def flowStatusDetails3 = northbound.getFlow(flow.id).flowStatusDetails
+        flowStatusDetails3.mainFlowPathStatus == "Down"
+        flowStatusDetails3.protectedFlowPathStatus == "Down"
 
         when: "Try to swap paths when the main path is available and the protected path is not available"
         northbound.swapFlowPath(flow.id)

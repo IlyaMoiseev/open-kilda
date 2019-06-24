@@ -56,6 +56,10 @@ public class RevertPathsSwapAction extends
         transactionManager.doInTransaction(() -> {
             Flow flow = getFlow(stateMachine.getFlowId());
 
+            if (stateMachine.getNewEncapsulationType() != null) {
+                flow.setEncapsulationType(stateMachine.getOriginalEncapsulationType());
+            }
+
             if (stateMachine.getOldPrimaryForwardPath() != null && stateMachine.getOldPrimaryReversePath() != null) {
                 FlowPath oldForward = getFlowPath(flow, stateMachine.getOldPrimaryForwardPath());
                 if (oldForward.getStatus() != FlowPathStatus.ACTIVE) {

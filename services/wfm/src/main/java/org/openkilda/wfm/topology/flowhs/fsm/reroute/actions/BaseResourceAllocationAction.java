@@ -40,7 +40,6 @@ import org.openkilda.wfm.share.flow.resources.FlowResourcesManager;
 import org.openkilda.wfm.share.flow.resources.ResourceAllocationException;
 import org.openkilda.wfm.share.history.model.FlowDumpData;
 import org.openkilda.wfm.share.history.model.FlowDumpData.DumpType;
-import org.openkilda.wfm.share.history.model.FlowEventData;
 import org.openkilda.wfm.share.history.model.FlowHistoryData;
 import org.openkilda.wfm.share.history.model.FlowHistoryHolder;
 import org.openkilda.wfm.share.mappers.HistoryMapper;
@@ -57,9 +56,7 @@ import net.jodah.failsafe.FailsafeException;
 import net.jodah.failsafe.RetryPolicy;
 
 import java.time.Instant;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -167,11 +164,7 @@ abstract class BaseResourceAllocationAction extends
     }
 
     protected PathPair findPath(Flow flow) throws RecoverableException, UnroutableFlowException {
-        return pathComputer.getPath(flow,
-                Stream.of(flow.getForwardPathId(), flow.getReversePathId(),
-                        flow.getProtectedForwardPathId(), flow.getProtectedReversePathId())
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toList()));
+        return pathComputer.getPath(flow, flow.getFlowPathIds());
     }
 
     protected boolean isNotSamePath(PathPair pathPair, FlowPath forwardPath, FlowPath reversePath) {
@@ -229,7 +222,6 @@ abstract class BaseResourceAllocationAction extends
 
     protected void saveHistory(Flow flow, FlowPathPair oldFlowPaths, FlowPathPair newFlowPaths,
                                FlowRerouteFsm stateMachine) {
-        Instant timestamp = Instant.now();
         FlowDumpData oldDumpData = HistoryMapper.INSTANCE.map(flow,
                 oldFlowPaths.getForward(), oldFlowPaths.getReverse());
         oldDumpData.setDumpType(DumpType.STATE_BEFORE);
@@ -244,13 +236,8 @@ abstract class BaseResourceAllocationAction extends
                     .flowDumpData(dumpData)
                     .flowHistoryData(FlowHistoryData.builder()
                             .action("New paths were created (with allocated resources)")
-                            .time(timestamp)
+                            .time(Instant.now())
                             .flowId(flow.getFlowId())
-                            .build())
-                    .flowEventData(FlowEventData.builder()
-                            .flowId(flow.getFlowId())
-                            .event(FlowEventData.Event.REROUTE)
-                            .time(timestamp)
                             .build())
                     .build();
             stateMachine.getCarrier().sendHistoryUpdate(historyHolder);

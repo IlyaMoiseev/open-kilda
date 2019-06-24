@@ -24,6 +24,7 @@ import org.openkilda.messaging.Message;
 import org.openkilda.messaging.error.ErrorData;
 import org.openkilda.messaging.error.ErrorMessage;
 import org.openkilda.messaging.error.ErrorType;
+import org.openkilda.model.FlowEncapsulationType;
 import org.openkilda.model.FlowPathStatus;
 import org.openkilda.model.FlowStatus;
 import org.openkilda.model.PathId;
@@ -93,7 +94,9 @@ public final class FlowRerouteFsm
     private boolean rerouteProtected;
 
     private FlowStatus originalFlowStatus;
+    private FlowEncapsulationType originalEncapsulationType;
 
+    private FlowEncapsulationType newEncapsulationType;
     private Collection<FlowResources> newResources;
     private PathId newPrimaryForwardPath;
     private PathId newPrimaryReversePath;
@@ -163,7 +166,7 @@ public final class FlowRerouteFsm
 
         builder.transition().from(State.RESOURCE_ALLOCATION_COMPLETED).to(State.INSTALLING_NON_INGRESS_RULES)
                 .on(Event.NEXT)
-                .perform(new InstallNonIngressRulesAction(persistenceManager));
+                .perform(new InstallNonIngressRulesAction(persistenceManager, resourcesManager));
         builder.transitions().from(State.RESOURCE_ALLOCATION_COMPLETED)
                 .toAmong(State.FINISHED)
                 .onEach(Event.REROUTE_IS_SKIPPED);
@@ -204,7 +207,7 @@ public final class FlowRerouteFsm
                 .onEach(Event.TIMEOUT, Event.ERROR);
 
         builder.transition().from(State.PATHS_SWAPPED).to(State.INSTALLING_INGRESS_RULES).on(Event.NEXT)
-                .perform(new InstallIngressRulesAction(persistenceManager));
+                .perform(new InstallIngressRulesAction(persistenceManager, resourcesManager));
         builder.transitions().from(State.PATHS_SWAPPED)
                 .toAmong(State.ROLLINGBACK_PATHS_SWAP, State.ROLLINGBACK_PATHS_SWAP)
                 .onEach(Event.TIMEOUT, Event.ERROR);
@@ -248,7 +251,7 @@ public final class FlowRerouteFsm
                 .onEach(Event.TIMEOUT, Event.ERROR);
 
         builder.transition().from(State.MARKING_FLOW_UP).to(State.REMOVING_OLD_RULES).on(Event.NEXT)
-                .perform(new RemoveOldRulesAction(persistenceManager));
+                .perform(new RemoveOldRulesAction(persistenceManager, resourcesManager));
         builder.transitions().from(State.MARKING_FLOW_UP)
                 .toAmong(State.ROLLINGBACK_PATHS_SWAP, State.ROLLINGBACK_PATHS_SWAP)
                 .onEach(Event.TIMEOUT, Event.ERROR);
@@ -281,7 +284,7 @@ public final class FlowRerouteFsm
                 .perform(new RevertPathsSwapAction(persistenceManager));
 
         builder.transition().from(State.ROLLINGBACK_RULE_INSTALLATION).to(State.REMOVING_NEW_RULES).on(Event.NEXT)
-                .perform(new RemoveNewRulesAction(persistenceManager));
+                .perform(new RemoveNewRulesAction(persistenceManager, resourcesManager));
 
         builder.internalTransition().within(State.REMOVING_NEW_RULES).on(Event.COMMAND_EXECUTED)
                 .perform(new OnReceivedRemoveResponseAction());

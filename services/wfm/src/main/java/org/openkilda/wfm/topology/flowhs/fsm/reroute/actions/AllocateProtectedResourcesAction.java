@@ -57,6 +57,10 @@ public class AllocateProtectedResourcesAction extends BaseResourceAllocationActi
                 .orElseThrow(() -> new FlowProcessingException(ErrorType.NOT_FOUND,
                         "Could not create a new path", format("Flow %s not found", flowId)));
 
+        if (stateMachine.getNewEncapsulationType() != null) {
+            flow.setEncapsulationType(stateMachine.getNewEncapsulationType());
+        }
+
         log.debug("Finding a new protected path for flow {}", flowId);
         PathPair potentialPath = findPath(flow);
         boolean overlappingProtectedPathFound =

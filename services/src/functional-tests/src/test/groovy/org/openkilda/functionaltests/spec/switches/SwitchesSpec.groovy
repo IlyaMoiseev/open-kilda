@@ -1,12 +1,18 @@
 package org.openkilda.functionaltests.spec.switches
 
+import static org.junit.Assume.assumeTrue
 import static org.openkilda.functionaltests.extension.tags.Tag.SMOKE
 import static org.openkilda.testing.Constants.NON_EXISTENT_SWITCH_ID
+import static org.openkilda.testing.Constants.WAIT_OFFSET
 
 import org.openkilda.functionaltests.BaseSpecification
 import org.openkilda.functionaltests.extension.tags.Tags
+import org.openkilda.functionaltests.helpers.Wrappers
 import org.openkilda.messaging.error.MessageError
+import org.openkilda.messaging.info.event.IslChangeType
+import org.openkilda.messaging.info.event.PathNode
 import org.openkilda.messaging.info.event.SwitchChangeType
+import org.openkilda.messaging.payload.flow.FlowState
 
 import org.springframework.http.HttpStatus
 import org.springframework.web.client.HttpClientErrorException
@@ -44,5 +50,101 @@ class SwitchesSpec extends BaseSpecification {
         def e = thrown(HttpClientErrorException)
         e.statusCode == HttpStatus.NOT_FOUND
         e.responseBodyAsString.to(MessageError).errorMessage == "Switch $NON_EXISTENT_SWITCH_ID not found."
+    }
+
+    def "Systems allows to get a flow that goes through a switch"() {
+        given: "Two active not neighboring switches with two diverse paths at least"
+        def switchPair = topologyHelper.getAllNotNeighboringSwitchPairs().find {
+            it.paths.unique(false) { a, b -> a.intersect(b) == [] ? 1 : 0 }.size() >= 3
+        } ?: assumeTrue("No suiting switches found", false)
+
+        and: "A protected flow"
+        def protectedFlow = flowHelper.randomFlow(switchPair)
+        protectedFlow.allocateProtectedPath = true
+        flowHelper.addFlow(protectedFlow)
+
+        and: "A single switch flow"
+        def simpleFlow = flowHelper.singleSwitchFlow(switchPair.src)
+        flowHelper.addFlow(simpleFlow)
+
+        when: "Get all flows going through the involved switches"
+        def flowPathInfo = northbound.getFlowPath(protectedFlow.id)
+        def mainPath = pathHelper.convert(flowPathInfo)
+        def protectedPath = pathHelper.convert(flowPathInfo.protectedPath)
+
+        def mainSwitches = pathHelper.getInvolvedSwitches(mainPath)*.dpId
+        def protectedSwitches = pathHelper.getInvolvedSwitches(mainPath)*.dpId
+        def involvedSwitchIds = (mainSwitches + protectedSwitches).unique()
+
+        then: "The created flows are in the response list from the src switch"
+        def switchFlowsResponseSrcSwitch = northbound.getSwitchFlows(switchPair.src.dpId)
+        switchFlowsResponseSrcSwitch.size() == 2
+        switchFlowsResponseSrcSwitch*.id.sort() == [protectedFlow.id, simpleFlow.id].sort()
+
+        and: "The protectedFlow only is in the response list from the involved switch(except the src switch)"
+        involvedSwitchIds.findAll { it != switchPair.src.dpId }.each { switchId ->
+            def getSwitchFlowsResponse = northbound.getSwitchFlows(switchId)
+            getSwitchFlowsResponse.size() == 1
+            getSwitchFlowsResponse[0].id == protectedFlow.id
+        }
+
+        when: "Get all flows going through the src switch based on the port of the main path"
+        def getSwitchFlowsResponse1 = northbound.getSwitchFlows(switchPair.src.dpId, mainPath[0].portNo)
+
+        then: "The protected flow only is in the response list"
+        getSwitchFlowsResponse1.size() == 1
+        getSwitchFlowsResponse1[0].id == protectedFlow.id
+
+        when: "Get all flows going through the src switch based on the port of the protected path"
+        def getSwitchFlowsResponse2 = northbound.getSwitchFlows(switchPair.src.dpId, protectedPath[0].portNo)
+
+        then: "The protected flow only is in the response list"
+        getSwitchFlowsResponse2.size() == 1
+        getSwitchFlowsResponse2[0].id == protectedFlow.id
+
+        when: "Get all flows going though the src switch based on the dstPort of the simple flow"
+        def getSwitchFlowsResponse3 = northbound.getSwitchFlows(switchPair.src.dpId, simpleFlow.destination.portId)
+
+        then: "The simple flow only is in the response list"
+        getSwitchFlowsResponse3.size() == 1
+        getSwitchFlowsResponse3[0].id == simpleFlow.id
+
+        when: "Make alternative paths are unavailable (bring ports down on the srcSwitch) for changing flow state to DOWN"
+        List<PathNode> broughtDownPorts = []
+        switchPair.paths.findAll { it != pathHelper.convert(northbound.getFlowPath(protectedFlow.id)) }.unique { it.first() }
+                .each { path ->
+                    def src = path.first()
+                    broughtDownPorts.add(src)
+                    northbound.portDown(src.switchId, src.portNo)
+                }
+        Wrappers.wait(WAIT_OFFSET) {
+            assert northbound.getAllLinks().findAll {
+                it.state == IslChangeType.FAILED
+            }.size() == broughtDownPorts.size() * 2
+        }
+
+        and: "Get all flows going through the src switch"
+        Wrappers.wait(WAIT_OFFSET) { assert northbound.getFlowStatus(protectedFlow.id).status == FlowState.DOWN }
+        def getSwitchFlowsResponse4 = northbound.getSwitchFlows(switchPair.src.dpId)
+
+        then: "The created flows are in the response list"
+        getSwitchFlowsResponse4.size() == 2
+        getSwitchFlowsResponse4*.id.sort() == [protectedFlow.id, simpleFlow.id].sort()
+
+        when: "Get all flows going though non-existing switch"
+        northbound.getSwitchFlows(NON_EXISTENT_SWITCH_ID)
+
+        then: "Human readable error is returned"
+        def exc = thrown(HttpClientErrorException)
+        exc.rawStatusCode == 404
+        exc.responseBodyAsString.to(MessageError).errorMessage == "Switch $NON_EXISTENT_SWITCH_ID not found."
+
+        and: "Cleanup: Delete the flows"
+        broughtDownPorts.every { northbound.portUp(it.switchId, it.portNo) }
+        [protectedFlow, simpleFlow].each { flowHelper.deleteFlow(it.id) }
+        Wrappers.wait(discoveryInterval + WAIT_OFFSET) {
+            northbound.getAllLinks().each { assert it.state != IslChangeType.FAILED }
+        }
+        database.resetCosts()
     }
 }
